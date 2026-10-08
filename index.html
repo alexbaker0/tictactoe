@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Tic-Tac-Toe Zero</title>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #161d31; --line: #2a3554; --text: #e8edf6; --muted: #93a0bd;
+    --x: #e23b4e; --o: #3fb6e8; --accent: #f4c542;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    padding: max(16px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+    -webkit-tap-highlight-color: transparent;
+  }
+  .back { align-self: flex-start; color: var(--muted); font-size: .85rem; text-decoration: none; }
+  .back:hover { color: var(--text); }
+  h1 { font-size: clamp(1.2rem, 5vw, 1.5rem); margin: 0; font-weight: 650; text-align: center; }
+  h1 span { color: var(--accent); }
+  .status { min-height: 26px; font-size: clamp(.95rem, 4vw, 1.1rem); font-weight: 600; text-align: center; }
+  .status .think { color: var(--accent); }
+
+  .board {
+    width: min(86vw, 360px); aspect-ratio: 1 / 1;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    background: var(--line); padding: 8px; border-radius: 16px;
+    box-shadow: 0 14px 40px rgba(0,0,0,.45); touch-action: manipulation;
+  }
+  .cell {
+    background: var(--panel); border-radius: 10px; position: relative;
+    display: grid; place-items: center;
+  }
+  .board.clickable .cell.empty { cursor: pointer; }
+  @media (hover: hover) { .board.clickable .cell.empty:hover { background: #1d2640; } }
+  .cell svg { width: 62%; height: 62%; overflow: visible; }
+  .cell svg path, .cell svg circle { fill: none; stroke-width: 12; stroke-linecap: round; }
+  .cell .X path { stroke: var(--x); stroke-dasharray: 100; animation: draw .25s ease-out both; }
+  .cell .X path + path { animation-delay: .12s; }
+  .cell .O circle { stroke: var(--o); stroke-dasharray: 260; animation: drawO .35s ease-out both; }
+  @keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+  @keyframes drawO { from { stroke-dashoffset: 260; } to { stroke-dashoffset: 0; } }
+  .cell.win { background: #2a3150; box-shadow: inset 0 0 0 3px var(--accent); }
+
+  /* "Show its thinking": share of search visits each square got on the AI's last move */
+  .heat {
+    position: absolute; inset: 6px; border-radius: 8px; display: grid; place-items: end center;
+    padding-bottom: 6px; font-size: .78rem; font-weight: 600; color: var(--accent);
+    background: rgba(244, 197, 66, var(--a, 0)); pointer-events: none;
+  }
+  .cell:not(.empty) .heat { place-items: start end; padding: 4px 6px 0 0; background: none; }
+  .board:not(.show-thinking) .heat { display: none; }
+
+  .legend { display: flex; gap: 16px; font-size: .82rem; color: var(--muted); flex-wrap: wrap; justify-content: center; }
+  .legend b.x { color: var(--x); } .legend b.o { color: var(--o); }
+  .eval { color: var(--muted); font-size: .8rem; text-align: center; min-height: 1.2em; }
+
+  .controls {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center;
+    background: var(--panel); padding: 12px 14px; border-radius: 12px; width: min(94vw, 460px);
+  }
+  .controls .field { display: flex; align-items: center; gap: 6px; }
+  .controls label { font-size: .8rem; color: var(--muted); }
+  .controls label.check { display: flex; align-items: center; gap: 6px; font-size: .9rem; color: var(--text); cursor: pointer; min-height: 44px; }
+  select, button {
+    font: inherit; font-size: .95rem; background: #222c46; color: var(--text);
+    border: 1px solid #344063; border-radius: 8px; padding: 10px 14px; min-height: 44px; cursor: pointer;
+  }
+  button.primary { background: var(--x); border-color: var(--x); font-weight: 600; }
+  button:hover { filter: brightness(1.1); }
+  .about { max-width: 460px; color: var(--muted); font-size: .85rem; line-height: 1.5; text-align: center; margin: 0; }
+  @media (max-width: 420px) {
+    .controls { flex-direction: column; align-items: stretch; }
+    .controls .field { justify-content: space-between; }
+    select, button { width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="/">← Alex's Lab</a>
+  <h1>Tic-Tac-Toe <span>Zero</span></h1>
+  <div class="status" id="status">Loading…</div>
+
+  <div class="board" id="board"></div>
+
+  <div class="legend">
+    <span><b class="x">X</b> <span id="xname">You</span></span>
+    <span><b class="o">O</b> <span id="oname">AI</span></span>
+  </div>
+  <div class="eval" id="eval"></div>
+
+  <div class="controls">
+    <div class="field"><label for="side">You play</label>
+      <select id="side">
+        <option value="1">X (first)</option>
+        <option value="-1">O (second)</option>
+      </select>
+    </div>
+    <div class="field"><label for="sims">Difficulty</label>
+      <select id="sims">
+        <option value="1">Easy (instinct only)</option>
+        <option value="25">Medium</option>
+        <option value="400" selected>Hard (unbeatable)</option>
+      </select>
+    </div>
+    <label class="check"><input type="checkbox" id="thinking"> Show its thinking</label>
+    <button class="primary" id="newgame">New game</button>
+  </div>
+
+  <p class="about">This AI started knowing only the rules. It learned by playing against itself,
+    AlphaZero-style: a small neural network guesses good moves and who's winning, and a tree search
+    checks those guesses. "Easy" uses the network's instinct alone; harder levels search more.</p>
+
+<script src="engine.js"></script>
+<script>
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+const evalEl = document.getElementById("eval");
+const sideEl = document.getElementById("side");
+const simsEl = document.getElementById("sims");
+const thinkingEl = document.getElementById("thinking");
+
+const X_SVG = '<svg viewBox="0 0 100 100" class="X"><path d="M20 20 L80 80"/><path d="M80 20 L20 80"/></svg>';
+const O_SVG = '<svg viewBox="0 0 100 100" class="O"><circle cx="50" cy="50" r="34"/></svg>';
+
+let net = null, board, player, human, gameOver, busy, gameId = 0, lastCounts = null;
+
+const cells = [];
+for (let i = 0; i < 9; i++) {
+  const c = document.createElement("div");
+  c.className = "cell empty";
+  c.setAttribute("role", "button");
+  c.setAttribute("aria-label", `Square ${i + 1}`);
+  c.addEventListener("click", () => onCell(i));
+  boardEl.appendChild(c);
+  cells.push(c);
+}
+
+function render() {
+  const line = winLine(board);
+  cells.forEach((c, i) => {
+    const v = board[i];
+    const want = v === 1 ? "X" : v === -1 ? "O" : "";
+    if (c.dataset.v !== want) {          // only redraw changed squares, so the draw animation plays once
+      c.dataset.v = want;
+      c.innerHTML = want === "X" ? X_SVG : want === "O" ? O_SVG : "";
+    }
+    c.classList.toggle("empty", v === 0);
+    c.classList.toggle("win", !!line && line.includes(i));
+    c.querySelector(".heat")?.remove();
+    if (lastCounts) {
+      const total = lastCounts.reduce((a, b) => a + b, 0);
+      const share = total ? lastCounts[i] / total : 0;
+      if (lastCounts[i] > 0) {
+        const h = document.createElement("div");
+        h.className = "heat";
+        h.style.setProperty("--a", (share * 0.45).toFixed(3));
+        h.textContent = share < 0.005 ? "<1%" : Math.round(share * 100) + "%";
+        c.appendChild(h);
+      }
+    }
+  });
+  const canClick = !gameOver && !busy && player === human;
+  boardEl.classList.toggle("clickable", canClick);
+  boardEl.classList.toggle("show-thinking", thinkingEl.checked);
+}
+
+function setStatus() {
+  const r = result(board);
+  if (r !== null) {
+    gameOver = true;
+    statusEl.textContent = r === 0 ? "Draw." : r === human ? "🎉 You win!" : "The AI wins.";
+  } else if (player === human) {
+    statusEl.textContent = "Your move.";
+  }
+}
+
+function aiMove() {
+  busy = true;
+  statusEl.innerHTML = '<span class="think">Thinking…</span>';
+  render();
+  const game = gameId;
+  // A short pause so the reply doesn't feel instant; the search itself takes milliseconds.
+  setTimeout(() => {
+    if (game !== gameId) return;
+    const sims = Number(simsEl.value);
+    const { value } = net.predict(board, player, legalMoves(board));
+    lastCounts = runMCTS(net, board, player, sims);
+    const m = lastCounts.indexOf(Math.max(...lastCounts));
+    evalEl.textContent = `AI's read of the position before its move: ${value > 0 ? "+" : ""}${value.toFixed(2)} (+1 = it's winning)`;
+    board = applyMove(board, player, m);
+    player = -player;
+    busy = false;
+    setStatus();
+    render();
+  }, 350);
+}
+
+function onCell(i) {
+  if (gameOver || busy || player !== human || board[i] !== 0) return;
+  board = applyMove(board, player, i);
+  player = -player;
+  setStatus();
+  render();
+  if (!gameOver) aiMove();
+}
+
+function newGame() {
+  if (!net) return;
+  gameId++;
+  board = new Array(9).fill(0); player = 1; human = Number(sideEl.value);
+  gameOver = false; busy = false; lastCounts = null;
+  evalEl.textContent = "";
+  document.getElementById("xname").textContent = human === 1 ? "You" : "AI";
+  document.getElementById("oname").textContent = human === 1 ? "AI" : "You";
+  statusEl.textContent = "Your move.";
+  render();
+  if (player !== human) aiMove();
+}
+
+document.getElementById("newgame").addEventListener("click", newGame);
+sideEl.addEventListener("change", newGame);
+thinkingEl.addEventListener("change", render);
+
+fetch("weights.json").then(r => r.json()).then(w => { net = new Net(w); newGame(); })
+  .catch(() => { statusEl.textContent = "Couldn't load the AI's weights."; });
+</script>
+</body>
+</html>
